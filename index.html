@@ -1338,6 +1338,72 @@
         }
         .ba-edit-badge.visible { display: block; }
 
+        /* ── Inquiry List Styles ────────────────────────────── */
+        .ba-inquiry-item {
+            padding: .75rem; background: #22263A; border: 1px solid #2E3348;
+            border-radius: 8px; margin-bottom: .5rem; cursor: pointer;
+            transition: all .2s; position: relative;
+        }
+        .ba-inquiry-item:hover { border-color: #6C8EF5; }
+        .ba-inquiry-item.status-new {
+            border-left: 3px solid #34D399;
+            background: linear-gradient(90deg, rgba(52, 211, 153, 0.08) 0%, #22263A 15%);
+        }
+        .ba-inquiry-item.status-unread {
+            border-left: 3px solid #FBBF24;
+            background: linear-gradient(90deg, rgba(251, 191, 36, 0.08) 0%, #22263A 15%);
+        }
+        .ba-inquiry-item.status-answered {
+            border-left: 3px solid #60A5FA;
+            background: linear-gradient(90deg, rgba(96, 165, 250, 0.08) 0%, #22263A 15%);
+        }
+        .ba-inquiry-header {
+            display: flex; justify-content: space-between; align-items: flex-start;
+            margin-bottom: .4rem;
+        }
+        .ba-inquiry-name {
+            font-size: .88rem; font-weight: 600; color: #E2E8F0;
+        }
+        .ba-inquiry-status {
+            font-size: .68rem; padding: .2rem .5rem; border-radius: 12px;
+            font-weight: 600; text-transform: uppercase; letter-spacing: .05em;
+        }
+        .ba-inquiry-status.status-new {
+            background: rgba(52, 211, 153, 0.15); color: #34D399;
+        }
+        .ba-inquiry-status.status-unread {
+            background: rgba(251, 191, 36, 0.15); color: #FBBF24;
+        }
+        .ba-inquiry-status.status-answered {
+            background: rgba(96, 165, 250, 0.15); color: #60A5FA;
+        }
+        .ba-inquiry-meta {
+            font-size: .72rem; color: #8892A4; margin-bottom: .4rem;
+        }
+        .ba-inquiry-topic {
+            font-size: .76rem; color: #6C8EF5; margin-bottom: .3rem;
+            font-weight: 500;
+        }
+        .ba-inquiry-message {
+            font-size: .78rem; color: #C8D0E0; line-height: 1.5;
+            max-height: 4.5em; overflow: hidden; text-overflow: ellipsis;
+            display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
+        }
+        .ba-inquiry-expanded .ba-inquiry-message {
+            max-height: none; -webkit-line-clamp: unset;
+        }
+        .ba-inquiry-actions {
+            margin-top: .5rem; display: flex; gap: .4rem; flex-wrap: wrap;
+        }
+        .ba-inquiry-btn {
+            padding: .3rem .6rem; font-size: .72rem; border-radius: 6px;
+            border: 1px solid #2E3348; background: #1A1D27; color: #C8D0E0;
+            cursor: pointer; transition: all .2s; font-weight: 500;
+        }
+        .ba-inquiry-btn:hover {
+            border-color: #6C8EF5; color: #6C8EF5;
+        }
+
         /* ── Click-to-edit highlight ─────────────────────────── */
         body.bio-admin-active [data-bio-id] {
             cursor: pointer; outline: 2px dashed transparent; outline-offset: 3px;
@@ -3261,6 +3327,27 @@
         <!-- PANEL: Contact -->
         <div id="ba-panel-contact" class="ba-panel">
             <div class="ba-section">
+                <div class="ba-section-title">📬 Контактни запитвания</div>
+                <p style="font-size:.74rem;color:#8892A4;margin-bottom:.6rem;">Получени запитвания от клиенти. Кликни за промяна на статус.</p>
+                <div class="ba-form-group">
+                    <label>Сортиране</label>
+                    <select id="ba-inquiry-sort" class="ba-select">
+                        <option value="date">📅 По дата (най-нови първи)</option>
+                        <option value="date-asc">📅 По дата (най-стари първи)</option>
+                        <option value="topic">📋 По тема (А-Я)</option>
+                        <option value="name">👤 По име (А-Я)</option>
+                        <option value="status">🔖 По статус</option>
+                    </select>
+                </div>
+                <div id="ba-inquiry-list" style="margin-top:.75rem;">
+                    <div style="text-align:center;padding:1.5rem;color:#8892A4;font-size:.85rem;">
+                        <p>Зареждане на запитвания...</p>
+                    </div>
+                </div>
+                <button class="ba-btn ba-btn-primary" id="ba-btn-refresh-inquiries" style="width:100%;margin-top:.5rem;">🔄 Обнови списъка</button>
+            </div>
+            <hr class="ba-divider">
+            <div class="ba-section">
                 <div class="ba-section-title">Информация за контакт</div>
                 <div class="ba-form-group">
                     <label>📧 Имейл адрес</label>
@@ -3737,6 +3824,7 @@
             setupImageUploads();
             setupThemePanel();
             setupContactPanel();
+            setupInquiriesPanel();
             setupTestimonialsPanel();
             setupEduPanel();
             setupServicesPanel();
@@ -4388,6 +4476,225 @@
                 applyContactFormSubjects();
                 hasUnsaved = true;
                 showToast('Темите са приложени (' + uniqueSubjects.length + '/10). Натисни Запази.');
+            });
+        }
+    }
+
+    /* ── Contact Inquiries Panel ── */
+    var contactInquiries = [];
+    var currentInquirySort = 'date';
+
+    function fetchContactInquiries() {
+        var listEl = document.getElementById('ba-inquiry-list');
+        if (!listEl) return;
+
+        listEl.innerHTML = '<div style="text-align:center;padding:1.5rem;color:#8892A4;font-size:.85rem;"><p>Зареждане на запитвания...</p></div>';
+
+        var workerOrigin = window._bioWorkerOrigin || 'https://port.radilov-k.workers.dev';
+        
+        fetch(workerOrigin + '/contacts', {
+            method: 'GET',
+            headers: { 'Content-Type': 'application/json' }
+        })
+        .then(function(res) {
+            if (!res.ok) {
+                throw new Error('HTTP ' + res.status);
+            }
+            return res.json();
+        })
+        .then(function(data) {
+            contactInquiries = data.inquiries || [];
+            renderInquiryList();
+        })
+        .catch(function(err) {
+            console.error('Failed to fetch inquiries:', err);
+            listEl.innerHTML = '<div style="text-align:center;padding:1.5rem;color:#F87171;font-size:.85rem;"><p>⚠ Грешка при зареждане на запитвания</p><p style="font-size:.75rem;margin-top:.3rem;">Моля, проверете връзката или опитайте отново</p></div>';
+        });
+    }
+
+    function sortInquiries(inquiries, sortBy) {
+        var sorted = inquiries.slice();
+        
+        switch(sortBy) {
+            case 'date':
+                sorted.sort(function(a, b) {
+                    return new Date(b.date || b.timestamp || 0) - new Date(a.date || a.timestamp || 0);
+                });
+                break;
+            case 'date-asc':
+                sorted.sort(function(a, b) {
+                    return new Date(a.date || a.timestamp || 0) - new Date(b.date || b.timestamp || 0);
+                });
+                break;
+            case 'topic':
+                sorted.sort(function(a, b) {
+                    var topicA = (a.subject || a.topic || '').toLowerCase();
+                    var topicB = (b.subject || b.topic || '').toLowerCase();
+                    return topicA.localeCompare(topicB, 'bg');
+                });
+                break;
+            case 'name':
+                sorted.sort(function(a, b) {
+                    var nameA = (a.name || '').toLowerCase();
+                    var nameB = (b.name || '').toLowerCase();
+                    return nameA.localeCompare(nameB, 'bg');
+                });
+                break;
+            case 'status':
+                var statusOrder = { 'new': 0, 'unread': 1, 'answered': 2 };
+                sorted.sort(function(a, b) {
+                    var statusA = statusOrder[a.status || 'new'] || 0;
+                    var statusB = statusOrder[b.status || 'new'] || 0;
+                    return statusA - statusB;
+                });
+                break;
+        }
+        
+        return sorted;
+    }
+
+    function renderInquiryList() {
+        var listEl = document.getElementById('ba-inquiry-list');
+        if (!listEl) return;
+
+        if (contactInquiries.length === 0) {
+            listEl.innerHTML = '<div style="text-align:center;padding:1.5rem;color:#8892A4;font-size:.85rem;"><p>📭 Няма получени запитвания</p></div>';
+            return;
+        }
+
+        var sorted = sortInquiries(contactInquiries, currentInquirySort);
+        listEl.innerHTML = '';
+
+        sorted.forEach(function(inquiry, index) {
+            var item = document.createElement('div');
+            var status = inquiry.status || 'new';
+            item.className = 'ba-inquiry-item status-' + status;
+            item.dataset.inquiryId = inquiry.id || index;
+            
+            var date = inquiry.date || inquiry.timestamp;
+            var dateStr = date ? formatInquiryDate(new Date(date)) : 'Неизвестна дата';
+            
+            var statusLabels = {
+                'new': 'Ново',
+                'unread': 'Непрочетено',
+                'answered': 'Отговорено'
+            };
+            
+            item.innerHTML = 
+                '<div class="ba-inquiry-header">' +
+                    '<div class="ba-inquiry-name">' + htmlEsc(inquiry.name || 'Неизвестен') + '</div>' +
+                    '<div class="ba-inquiry-status status-' + status + '">' + statusLabels[status] + '</div>' +
+                '</div>' +
+                '<div class="ba-inquiry-meta">📧 ' + htmlEsc(inquiry.email || '') + ' • 📅 ' + dateStr + '</div>' +
+                '<div class="ba-inquiry-topic">📋 ' + htmlEsc(inquiry.subject || inquiry.topic || 'Без тема') + '</div>' +
+                '<div class="ba-inquiry-message">' + htmlEsc(inquiry.message || '') + '</div>' +
+                '<div class="ba-inquiry-actions">' +
+                    '<button class="ba-inquiry-btn" data-action="toggle">Разгъни/Сгъни</button>' +
+                    '<button class="ba-inquiry-btn" data-action="status" data-status="new">🟢 Ново</button>' +
+                    '<button class="ba-inquiry-btn" data-action="status" data-status="unread">🟡 Непрочетено</button>' +
+                    '<button class="ba-inquiry-btn" data-action="status" data-status="answered">🔵 Отговорено</button>' +
+                '</div>';
+            
+            listEl.appendChild(item);
+        });
+
+        // Attach event listeners
+        listEl.querySelectorAll('.ba-inquiry-item').forEach(function(item) {
+            item.querySelectorAll('[data-action="toggle"]').forEach(function(btn) {
+                btn.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    item.classList.toggle('ba-inquiry-expanded');
+                });
+            });
+
+            item.querySelectorAll('[data-action="status"]').forEach(function(btn) {
+                btn.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    var newStatus = btn.dataset.status;
+                    var inquiryId = item.dataset.inquiryId;
+                    updateInquiryStatus(inquiryId, newStatus);
+                });
+            });
+        });
+    }
+
+    function formatInquiryDate(date) {
+        if (!date || isNaN(date.getTime())) return 'Невалидна дата';
+        
+        var now = new Date();
+        var diff = now - date;
+        var minutes = Math.floor(diff / 60000);
+        var hours = Math.floor(diff / 3600000);
+        var days = Math.floor(diff / 86400000);
+        
+        if (minutes < 1) return 'Току-що';
+        if (minutes < 60) return minutes + ' мин. назад';
+        if (hours < 24) return hours + ' ч. назад';
+        if (days < 7) return days + ' дни назад';
+        
+        var day = String(date.getDate()).padStart(2, '0');
+        var month = String(date.getMonth() + 1).padStart(2, '0');
+        var year = date.getFullYear();
+        return day + '.' + month + '.' + year;
+    }
+
+    function updateInquiryStatus(inquiryId, newStatus) {
+        var inquiry = contactInquiries.find(function(inq, idx) {
+            return (inq.id || idx) == inquiryId;
+        });
+        
+        if (!inquiry) return;
+        
+        var workerOrigin = window._bioWorkerOrigin || 'https://port.radilov-k.workers.dev';
+        
+        // Update locally first for immediate feedback
+        inquiry.status = newStatus;
+        renderInquiryList();
+        
+        // Send update to server
+        fetch(workerOrigin + '/contacts/' + inquiryId, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: newStatus })
+        })
+        .then(function(res) {
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            return res.json();
+        })
+        .then(function() {
+            showToast('✅ Статусът е обновен', 'success');
+        })
+        .catch(function(err) {
+            console.error('Failed to update status:', err);
+            showToast('⚠ Грешка при обновяване на статус', 'error');
+            // Revert on error and refetch
+            fetchContactInquiries();
+        });
+    }
+
+    function setupInquiriesPanel() {
+        var sortSelect = document.getElementById('ba-inquiry-sort');
+        if (sortSelect) {
+            sortSelect.addEventListener('change', function() {
+                currentInquirySort = sortSelect.value;
+                renderInquiryList();
+            });
+        }
+
+        var refreshBtn = document.getElementById('ba-btn-refresh-inquiries');
+        if (refreshBtn) {
+            refreshBtn.addEventListener('click', function() {
+                fetchContactInquiries();
+            });
+        }
+
+        // Fetch inquiries when contact panel is opened
+        var contactTabBtn = document.querySelector('[data-ba-panel="ba-panel-contact"]');
+        if (contactTabBtn) {
+            contactTabBtn.addEventListener('click', function() {
+                if (contactInquiries.length === 0) {
+                    fetchContactInquiries();
+                }
             });
         }
     }

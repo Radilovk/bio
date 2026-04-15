@@ -40,7 +40,7 @@ jobs:
           )
 
           if n == 0:
-              print('WARNING: __BAKED_BIO_CONTENT__ tag not found in index.html', file=sys.stderr)
+              print(f'ERROR: __BAKED_BIO_CONTENT__ tag not found in index.html', file=sys.stderr)
               sys.exit(1)
 
           with open('index.html', 'w', encoding='utf-8') as f:

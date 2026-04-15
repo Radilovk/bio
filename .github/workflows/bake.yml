@@ -1,0 +1,58 @@
+name: Bake bio content
+
+on:
+  push:
+    paths:
+      - 'bio_content.json'
+
+jobs:
+  bake:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Bake bio_content.json into index.html
+        run: |
+          python3 - <<'EOF'
+          import re, json, sys
+
+          with open('bio_content.json', 'r', encoding='utf-8') as f:
+              raw = f.read().strip()
+
+          # Validate JSON
+          try:
+              json.loads(raw)
+          except json.JSONDecodeError as e:
+              print(f'ERROR: bio_content.json is not valid JSON: {e}', file=sys.stderr)
+              sys.exit(1)
+
+          with open('index.html', 'r', encoding='utf-8') as f:
+              html = f.read()
+
+          new_tag = '<script>window.__BAKED_BIO_CONTENT__=' + raw + '</script>'
+          updated, n = re.subn(
+              r'<script>window\.__BAKED_BIO_CONTENT__=.*?</script>',
+              new_tag,
+              html,
+              flags=re.DOTALL
+          )
+
+          if n == 0:
+              print(f'ERROR: __BAKED_BIO_CONTENT__ tag not found in index.html', file=sys.stderr)
+              sys.exit(1)
+
+          with open('index.html', 'w', encoding='utf-8') as f:
+              f.write(updated)
+
+          print(f'Baked {len(raw)} bytes of bio_content.json into index.html.')
+          EOF
+
+      - name: Commit updated index.html
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add index.html
+          git diff --cached --quiet && echo "No changes to commit." || git commit -m "auto: bake bio_content.json into index.html"
+          git push

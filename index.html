@@ -3458,6 +3458,21 @@
                 </div>
                 <button class="ba-btn ba-btn-warn" id="ba-btn-dup-section" style="width:100%;">📋 Дублирай секцията</button>
             </div>
+            <hr class="ba-divider">
+            <div class="ba-section">
+                <div class="ba-section-title">⚙️ GitHub настройки (резервен запис)</div>
+                <p style="font-size:.72rem;color:#8892A4;margin-bottom:.5rem;">Когато работникът е недостъпен, промените се записват директно в GitHub. Необходим е личен токен с разрешение <code>contents:write</code>.</p>
+                <div class="ba-form-group">
+                    <label>GitHub репо</label>
+                    <input type="text" id="ba-gh-repo" placeholder="Radilovk/bio" style="font-family:monospace;font-size:.8rem;">
+                </div>
+                <div class="ba-form-group">
+                    <label>GitHub Personal Access Token</label>
+                    <input type="password" id="ba-gh-token" placeholder="ghp_…" style="font-family:monospace;font-size:.8rem;">
+                </div>
+                <button class="ba-btn ba-btn-success" id="ba-btn-gh-save-cfg" style="width:100%;">💾 Запази GitHub настройките</button>
+                <p id="ba-gh-cfg-status" style="font-size:.72rem;margin-top:.3rem;color:#8892A4;"></p>
+            </div>
         </div>
 
     </div><!-- /ba-sidebar-inner -->
@@ -3620,6 +3635,44 @@
     }
     var WORKER_ORIGIN = (window._bioWorkerOrigin || 'https://bio.radilov-k.workers.dev');
     var BIO_API_URL = WORKER_ORIGIN + '/bio_content.json';
+    var GH_TOKEN_KEY = 'bioadmin_gh_token';
+    var GH_REPO_KEY  = 'bioadmin_gh_repo';
+
+    /* ── Save data via GitHub Contents API (fallback when worker is down) ── */
+    function saveViaGitHub(data) {
+        var token = localStorage.getItem(GH_TOKEN_KEY) || '';
+        var repo  = (localStorage.getItem(GH_REPO_KEY) || 'Radilovk/bio').replace(/^\/|\/$/g, '');
+        if (!token) {
+            return Promise.reject(new Error('no_token'));
+        }
+        var apiBase = 'https://api.github.com/repos/' + repo + '/contents/bio_content.json';
+        var headers = {
+            'Authorization': 'token ' + token,
+            'Content-Type': 'application/json',
+            'Accept': 'application/vnd.github+json'
+        };
+        var body = JSON.stringify(data, null, 0);
+        var b64  = btoa(unescape(encodeURIComponent(body)));
+
+        return fetch(apiBase, { headers: headers })
+            .then(function(r) { return r.status === 404 ? null : r.json(); })
+            .then(function(existing) {
+                var payload = {
+                    message: 'admin: update bio_content.json',
+                    content: b64
+                };
+                if (existing && existing.sha) payload.sha = existing.sha;
+                return fetch(apiBase, {
+                    method: 'PUT',
+                    headers: headers,
+                    body: JSON.stringify(payload)
+                });
+            })
+            .then(function(r) {
+                if (!r.ok) return r.text().then(function(t) { throw new Error(t); });
+                return r.json();
+            });
+    }
 
     var adminEl      = document.getElementById('bio-inline-admin');
     var toastEl      = document.getElementById('ba-toast');
@@ -3835,13 +3888,27 @@
                 showToast('Грешка: ' + r.status + ' - ' + r.statusText, 'error');
             }
         }).catch(function(err) {
-            if (saveBtn) {
-                saveBtn.disabled = false;
-                saveBtn.textContent = '💾 Запази';
-            }
-            saveStatusEl.textContent = '⚠️ Локален запис';
-            showToast('Записано локално. Сървърът е недостъпен.', 'error');
-            console.error('Save error:', err);
+            console.error('Worker save error:', err);
+            saveStatusEl.textContent = '⏳ Запис в GitHub...';
+            saveViaGitHub(savedData)
+                .then(function() {
+                    if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = '💾 Запази'; }
+                    saveStatusEl.textContent = '✅ Записано в GitHub ' + new Date().toLocaleTimeString('bg-BG');
+                    showToast('Промените са записани в GitHub! Сайтът ще се актуализира след ~1 мин.', 'success');
+                    document.cookie = 'bio_dirty=1; path=/; SameSite=Strict';
+                    hasUnsaved = false;
+                })
+                .catch(function(ghErr) {
+                    if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = '💾 Запази'; }
+                    if (ghErr && ghErr.message === 'no_token') {
+                        saveStatusEl.textContent = '⚠️ Локален запис (няма GitHub токен)';
+                        showToast('Данните са запазени само локално. Задай GitHub токен в ⚙️ Инструменти → GitHub настройки.', 'error');
+                    } else {
+                        saveStatusEl.textContent = '⚠️ Локален запис';
+                        showToast('Записано локално. Провери GitHub токена в Инструменти.', 'error');
+                        console.error('GitHub save error:', ghErr);
+                    }
+                });
         });
     }
 
@@ -5776,6 +5843,37 @@
             orig.parentNode.insertBefore(clone, orig.nextSibling);
             hasUnsaved = true;
             showToast('📋 Секцията е дублирана.');
+        });
+    })();
+
+    /* ── GitHub settings panel ── */
+    (function() {
+        var repoInput  = document.getElementById('ba-gh-repo');
+        var tokenInput = document.getElementById('ba-gh-token');
+        var saveBtn    = document.getElementById('ba-btn-gh-save-cfg');
+        var statusEl   = document.getElementById('ba-gh-cfg-status');
+        if (!saveBtn) return;
+
+        // Pre-populate from localStorage
+        var storedToken = localStorage.getItem(GH_TOKEN_KEY) || '';
+        var storedRepo  = localStorage.getItem(GH_REPO_KEY)  || 'Radilovk/bio';
+        if (repoInput)  repoInput.value  = storedRepo;
+        if (tokenInput) tokenInput.value = storedToken ? '••••••••' : '';
+
+        saveBtn.addEventListener('click', function() {
+            var repo  = repoInput  ? repoInput.value.trim()  : '';
+            var token = tokenInput ? tokenInput.value.trim() : '';
+            if (!token || token === '••••••••') {
+                // Keep existing token if user didn't type a new one
+                token = localStorage.getItem(GH_TOKEN_KEY) || '';
+            }
+            if (!repo)  { statusEl.textContent = '⚠️ Въведи репо (напр. Radilovk/bio)'; statusEl.style.color = '#f87171'; return; }
+            if (!token) { statusEl.textContent = '⚠️ Въведи GitHub токен'; statusEl.style.color = '#f87171'; return; }
+            localStorage.setItem(GH_REPO_KEY,  repo);
+            localStorage.setItem(GH_TOKEN_KEY, token);
+            if (tokenInput) tokenInput.value = '••••••••';
+            statusEl.textContent = '✅ Настройките са запазени.';
+            statusEl.style.color = '#34D399';
         });
     })();
 

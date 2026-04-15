@@ -2609,6 +2609,13 @@
                         if (el) el.src = src;
                     }
                 });
+                // Also handle any img-* keys with data-bio-id attributes
+                Object.entries(data.images).forEach(function(entry) {
+                    var key = entry[0], src = entry[1];
+                    if (!src || key.indexOf('img-') !== 0) return;
+                    var el = document.querySelector('[data-bio-id="' + key + '"]');
+                    if (el) el.src = src;
+                });
             }
 
             // Theme / CSS variable overrides

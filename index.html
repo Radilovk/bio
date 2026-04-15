@@ -2446,7 +2446,7 @@
                 document.getElementById('contactForm').reset();
                 btn.textContent = 'Вграждане...';
                 btn.disabled = true;
-                const workerOrigin = window._bioWorkerOrigin || 'https://port.radilov-k.workers.dev';
+                const workerOrigin = window._bioWorkerOrigin || 'https://bio.radilov-k.workers.dev';
                 fetch(workerOrigin + '/bio_rebake', { method: 'POST' })
                     .then(function(r) { return r.ok ? r.json() : Promise.reject(r.status); })
                     .then(function() {
@@ -2470,7 +2470,7 @@
             btn.textContent = 'Изпращане...';
             btn.disabled = true;
 
-            const workerOrigin = window._bioWorkerOrigin || 'https://port.radilov-k.workers.dev';
+            const workerOrigin = window._bioWorkerOrigin || 'https://bio.radilov-k.workers.dev';
             fetch(workerOrigin + '/contacts', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -3002,7 +3002,7 @@
         // Store worker origin for contact form
         var workerOrigin = window.location.hostname === 'localhost'
             ? 'http://' + window.location.host
-            : 'https://port.radilov-k.workers.dev';
+            : 'https://bio.radilov-k.workers.dev';
         window._bioWorkerOrigin = workerOrigin;
 
         // Auto-tag any remaining text elements with stable data-bio-id attributes
@@ -3618,7 +3618,7 @@
         
         return temp.innerHTML;
     }
-    var WORKER_ORIGIN = (window._bioWorkerOrigin || 'https://port.radilov-k.workers.dev');
+    var WORKER_ORIGIN = (window._bioWorkerOrigin || 'https://bio.radilov-k.workers.dev');
     var BIO_API_URL = WORKER_ORIGIN + '/bio_content.json';
 
     var adminEl      = document.getElementById('bio-inline-admin');

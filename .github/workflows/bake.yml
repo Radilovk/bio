@@ -19,34 +19,31 @@ jobs:
           import re, json, sys
 
           with open('bio_content.json', 'r', encoding='utf-8') as f:
-              raw = f.read().strip()
+              bio_data = json.load(f)
 
-          # Validate JSON
-          try:
-              json.loads(raw)
-          except json.JSONDecodeError as e:
-              print(f'ERROR: bio_content.json is not valid JSON: {e}', file=sys.stderr)
-              sys.exit(1)
+          # Re-serialize to ensure proper escaping
+          # Use compact format and ensure_ascii=False to keep Unicode characters
+          serialized = json.dumps(bio_data, ensure_ascii=False, separators=(',', ':'))
 
           with open('index.html', 'r', encoding='utf-8') as f:
               html = f.read()
 
-          new_tag = '<script>window.__BAKED_BIO_CONTENT__=' + raw + '</script>'
-          updated, n = re.subn(
-              r'<script>window\.__BAKED_BIO_CONTENT__=.*?</script>',
-              new_tag,
-              html,
-              flags=re.DOTALL
-          )
-
-          if n == 0:
-              print(f'ERROR: __BAKED_BIO_CONTENT__ tag not found in index.html', file=sys.stderr)
+          # Find the old baked content tag
+          old_match = re.search(r'<script>window\.__BAKED_BIO_CONTENT__=.*?</script>', html, re.DOTALL)
+          if not old_match:
+              print('ERROR: __BAKED_BIO_CONTENT__ tag not found in index.html', file=sys.stderr)
               sys.exit(1)
+
+          old_tag = old_match.group(0)
+          new_tag = '<script>window.__BAKED_BIO_CONTENT__=' + serialized + '</script>'
+
+          # Use str.replace() instead of re.subn() to avoid escape sequence interpretation
+          updated = html.replace(old_tag, new_tag, 1)
 
           with open('index.html', 'w', encoding='utf-8') as f:
               f.write(updated)
 
-          print(f'Baked {len(raw)} bytes of bio_content.json into index.html.')
+          print(f'Baked {len(serialized)} bytes of bio_content.json into index.html.')
           EOF
 
       - name: Commit updated index.html

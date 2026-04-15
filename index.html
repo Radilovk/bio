@@ -2593,13 +2593,20 @@
                 });
             }
 
-            // Image overrides
+            // Image overrides.
+            // Accepts both short keys ("hero", "about", "philosophy") and
+            // data-bio-id keys ("img-hero", "img-about", "img-philosophy").
+            // Only these three named images are guaranteed to survive a re-bake
+            // because their data-bio-id attributes are stable in the HTML.
+            // Images replaced via the generic "📷 Замени" flow use auto-generated
+            // keys that are not stable across page rebuilds.
             if (data.images) {
                 Object.entries(IMAGE_TARGETS).forEach(function(entry) {
                     var key = entry[0], sel = entry[1];
-                    if (data.images[key]) {
+                    var src = data.images[key] || data.images['img-' + key];
+                    if (src) {
                         var el = document.querySelector(sel);
-                        if (el) el.src = data.images[key];
+                        if (el) el.src = src;
                     }
                 });
             }
@@ -3848,9 +3855,13 @@
         applyImages();
         applyTheme();
         applyContact();
+        applyContactFormSubjects();
         applyTestimonials();
         applyEduItems();
         applyServices();
+        applyIconOverrides();
+        applyLayoutOverrides();
+        applyGlobalSettings();
         // Apply custom CSS if available (function defined later in the IIFE)
         if (typeof applyCustomCSS === 'function' && savedData.globalSettings && savedData.globalSettings.customCSS) {
             applyCustomCSS(savedData.globalSettings.customCSS);
@@ -3895,11 +3906,20 @@
         };
         Object.entries(IMAGE_TARGETS).forEach(function(entry) {
             var key = entry[0], sel = entry[1];
-            if (savedData.images && savedData.images[key]) {
+            var src = savedData.images && (savedData.images[key] || savedData.images['img-' + key]);
+            if (src) {
                 var el = document.querySelector(sel);
-                if (el) el.src = savedData.images[key];
+                if (el) el.src = src;
             }
         });
+        if (savedData.images) {
+            Object.entries(savedData.images).forEach(function(entry) {
+                var key = entry[0], src = entry[1];
+                if (!src || key.indexOf('img-') !== 0) return;
+                var el = document.querySelector('[data-bio-id="' + key + '"]');
+                if (el) el.src = src;
+            });
+        }
     }
 
     function applyTheme() {
@@ -5625,9 +5645,13 @@
                     showToast('SVG съдържа нежелан код', 'error'); return;
                 }
                 var bioId = baGenImgId(_baPendingImg);
+                _baPendingImg.setAttribute('data-bio-id', bioId);
                 _baPendingImg.src = dataUrl;
                 if (!savedData.images) savedData.images = {};
                 savedData.images[bioId] = dataUrl;
+                if (bioId.indexOf('img-') === 0) {
+                    savedData.images[bioId.slice(4)] = dataUrl;
+                }
                 hasUnsaved = true;
                 showToast('✅ Изображението е заменено. Натисни Запази.');
             };

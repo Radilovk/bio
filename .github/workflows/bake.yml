@@ -1,0 +1,55 @@
+name: Bake bio content
+
+on:
+  push:
+    paths:
+      - 'bio_content.json'
+
+jobs:
+  bake:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Bake bio_content.json into index.html
+        run: |
+          python3 - <<'EOF'
+          import re, json, sys
+
+          with open('bio_content.json', 'r', encoding='utf-8') as f:
+              bio_data = json.load(f)
+
+          # Re-serialize to ensure proper escaping
+          # Use compact format and ensure_ascii=False to keep Unicode characters
+          serialized = json.dumps(bio_data, ensure_ascii=False, separators=(',', ':'))
+
+          with open('index.html', 'r', encoding='utf-8') as f:
+              html = f.read()
+
+          # Find the old baked content tag
+          old_match = re.search(r'<script>window\.__BAKED_BIO_CONTENT__=.*?</script>', html, re.DOTALL)
+          if not old_match:
+              print('ERROR: __BAKED_BIO_CONTENT__ tag not found in index.html', file=sys.stderr)
+              sys.exit(1)
+
+          old_tag = old_match.group(0)
+          new_tag = '<script>window.__BAKED_BIO_CONTENT__=' + serialized + '</script>'
+
+          # Use str.replace() instead of re.subn() to avoid escape sequence interpretation
+          updated = html.replace(old_tag, new_tag, 1)
+
+          with open('index.html', 'w', encoding='utf-8') as f:
+              f.write(updated)
+
+          print(f'Baked {len(serialized)} bytes of bio_content.json into index.html.')
+          EOF
+
+      - name: Commit updated index.html
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add index.html
+          git diff --cached --quiet && echo "No changes to commit." || git commit -m "auto: bake bio_content.json into index.html"
+          git push

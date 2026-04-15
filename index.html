@@ -2609,6 +2609,13 @@
                         if (el) el.src = src;
                     }
                 });
+                // Also handle any img-* keys with data-bio-id attributes
+                Object.entries(data.images).forEach(function(entry) {
+                    var key = entry[0], src = entry[1];
+                    if (!src || key.indexOf('img-') !== 0) return;
+                    var el = document.querySelector('[data-bio-id="' + key + '"]');
+                    if (el) el.src = src;
+                });
             }
 
             // Theme / CSS variable overrides
@@ -3031,7 +3038,22 @@
             applyBioContent(window.__BAKED_BIO_CONTENT__);
         }
 
-        // No backend requests on normal load — page works with baked or default content.
+        // Also fetch fresh content from API to apply admin changes immediately
+        // This ensures changes made via admin are visible without requiring a new deploy
+        (function fetchLiveContent() {
+            var apiUrl = (window._bioWorkerOrigin || 'https://port.radilov-k.workers.dev') + '/bio_content.json';
+            fetch(apiUrl)
+                .then(function(r) { return r.ok ? r.json() : null; })
+                .then(function(data) {
+                    if (data && typeof data === 'object' && Object.keys(data).length > 0) {
+                        applyBioContent(data);
+                    }
+                })
+                .catch(function() {
+                    // Silently fail - baked content is already applied
+                });
+        })();
+
         clearTimeout(revealTimer);
         reveal();
     })();

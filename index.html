@@ -2593,13 +2593,20 @@
                 });
             }
 
-            // Image overrides
+            // Image overrides.
+            // Accepts both short keys ("hero", "about", "philosophy") and
+            // data-bio-id keys ("img-hero", "img-about", "img-philosophy").
+            // Only these three named images are guaranteed to survive a re-bake
+            // because their data-bio-id attributes are stable in the HTML.
+            // Images replaced via the generic "📷 Замени" flow use auto-generated
+            // keys that are not stable across page rebuilds.
             if (data.images) {
                 Object.entries(IMAGE_TARGETS).forEach(function(entry) {
                     var key = entry[0], sel = entry[1];
-                    if (data.images[key]) {
+                    var src = data.images[key] || data.images['img-' + key];
+                    if (src) {
                         var el = document.querySelector(sel);
-                        if (el) el.src = data.images[key];
+                        if (el) el.src = src;
                     }
                 });
             }
@@ -3848,9 +3855,13 @@
         applyImages();
         applyTheme();
         applyContact();
+        applyContactFormSubjects();
         applyTestimonials();
         applyEduItems();
         applyServices();
+        applyIconOverrides();
+        applyLayoutOverrides();
+        applyGlobalSettings();
         // Apply custom CSS if available (function defined later in the IIFE)
         if (typeof applyCustomCSS === 'function' && savedData.globalSettings && savedData.globalSettings.customCSS) {
             applyCustomCSS(savedData.globalSettings.customCSS);
